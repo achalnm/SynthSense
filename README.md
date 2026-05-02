@@ -2,7 +2,7 @@
 
 A plug-and-play pipeline for detecting AI-generated images. Bring your own dataset, run `train.py`, and get a production-ready ensemble classifier with a Gradio web interface.
 
-No pretrained weights are included — and that's intentional. Different AI generators (StyleGAN, Midjourney, DALL-E, Stable Diffusion) leave different statistical fingerprints. Training on your target distribution consistently outperforms generic detectors.
+No pretrained weights are included, and that's intentional. Different AI generators (StyleGAN, Midjourney, DALL-E, Stable Diffusion) leave different statistical fingerprints. Training on your target distribution consistently outperforms generic detectors.
 
 ---
 
@@ -86,11 +86,11 @@ Full training on 100k images takes approximately 2–3 hours on a mid-range GPU.
 ## Project structure
 
 ```
-├── config.py        — paths, device, hyperparameters
-├── data_loader.py   — dataset scanning and split loading
-├── features.py      — CLIP, DINOv2, and forensic feature extraction + caching
-├── models.py        — MLP architecture and training routines
-├── train.py         — end-to-end training pipeline
-├── predict.py       — single-image inference
-└── app.py           — Gradio web interface
+├── config.py        - paths, device, hyperparameters
+├── data_loader.py   - dataset scanning and split loading
+├── features.py      - CLIP, DINOv2, and forensic feature extraction + caching
+├── models.py        - MLP architecture and training routines
+├── train.py         - end-to-end training pipeline
+├── predict.py       - single-image inference
+└── app.py           - Gradio web interface
 ```
