@@ -1,0 +1,24 @@
+# dataset
+data/
+AIFAKEREAL/
+
+# generated during training
+cache/
+saved_models/
+
+# python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# claude
+.claude/
