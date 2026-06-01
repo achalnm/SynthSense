@@ -16,7 +16,7 @@ Features are extracted from three complementary sources and fused into a single 
 | DINOv2 ViT-L/14 (CLS + patch mean) | Structural and spatial artifacts | 2048 |
 | Forensic signals (NPR + FFT + ELA + PRNU) | Compression artifacts, frequency anomalies, sensor noise | 92 |
 
-Combined 5212-dim vector → IncrementalPCA → 256-dim → stacking ensemble:
+Combined 5212-dim vector -> IncrementalPCA -> 256-dim -> stacking ensemble:
 - **LogisticRegression** (saga, balanced class weights)
 - **5-seed MLP** (4-layer residual network, focal loss, cosine LR, early stopping)
 - **Meta-learner** (LogisticRegression on OOF predictions)
