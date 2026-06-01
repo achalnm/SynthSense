@@ -30,8 +30,8 @@ Training uses 5-fold stratified cross-validation with out-of-fold stacking. The 
 ```
 data/
 ├── train/
-│   ├── real/    ← authentic images (.jpg / .jpeg / .png / .webp)
-│   └── fake/    ← AI-generated images
+│   ├── real/    <- authentic images (.jpg / .jpeg / .png / .webp)
+│   └── fake/    <- AI-generated images
 └── test/
     ├── real/
     └── fake/
