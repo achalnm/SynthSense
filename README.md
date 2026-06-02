@@ -1,96 +1,81 @@
-# AI Image Detector
+# SynthSense
 
-A plug-and-play pipeline for detecting AI-generated images. Bring your own dataset, run `train.py`, and get a production-ready ensemble classifier with a Gradio web interface.
+Detects whether an image is real or AI-generated. Instead of shipping fixed weights, SynthSense is built to be trained on the distribution you care about. Different generators (StyleGAN, Midjourney, Stable Diffusion, and others) leave different statistical traces, so a detector trained on the target distribution holds up better than a generic one.
 
-No pretrained weights are included, and that's intentional. Different AI generators (StyleGAN, Midjourney, DALL-E, Stable Diffusion) leave different statistical fingerprints. Training on your target distribution consistently outperforms generic detectors.
+## Approach
 
----
+SynthSense does not rely on a single signal. It pulls features from three sources that capture different kinds of evidence, then combines them.
 
-## How it works
+Semantic features come from CLIP ViT-L/14, using the last three hidden layers (3072 dimensions). These pick up high-level inconsistencies and unnatural texture that a vision-language model is sensitive to.
 
-Features are extracted from three complementary sources and fused into a single vector:
+Structural features come from DINOv2 ViT-L/14, using the CLS token and the mean of the patch tokens (2048 dimensions). These capture spatial and structural artifacts.
 
-| Source | What it captures | Dims |
-|---|---|---|
-| CLIP ViT-L/14 (last 3 hidden layers) | Semantic inconsistencies, unnatural textures | 3072 |
-| DINOv2 ViT-L/14 (CLS + patch mean) | Structural and spatial artifacts | 2048 |
-| Forensic signals (NPR + FFT + ELA + PRNU) | Compression artifacts, frequency anomalies, sensor noise | 92 |
+Forensic features are computed directly from the pixels (92 dimensions) and target the low-level traces generators tend to leave: an up- and down-sampling residual (NPR) that exposes local pixel-correlation artifacts, a radially averaged FFT power spectrum for frequency anomalies, Error Level Analysis for compression inconsistencies, and a PRNU estimate for sensor-noise patterns.
 
-Combined 5212-dim vector -> IncrementalPCA -> 256-dim -> stacking ensemble:
-- **LogisticRegression** (saga, balanced class weights)
-- **5-seed MLP** (4-layer residual network, focal loss, cosine LR, early stopping)
-- **Meta-learner** (LogisticRegression on OOF predictions)
+The three sources concatenate into a single vector of roughly 5,200 dimensions. That vector is reduced with IncrementalPCA to 256 dimensions, then classified by a stacked ensemble: a logistic regression (saga solver, balanced class weights) and a five-seed MLP, which is a four-layer residual network trained with focal loss, a cosine learning-rate schedule, and early stopping. A logistic-regression meta-learner combines the two using out-of-fold predictions.
 
-Training uses 5-fold stratified cross-validation with out-of-fold stacking. The decision threshold is tuned on OOF F1.
+## Evaluation
 
----
+The training pipeline is built around avoiding the usual ways a detector can look better than it really is.
+
+Cross-validation uses 5-fold stratified splits. The ensemble is trained with out-of-fold stacking, so the meta-learner never sees predictions from data it was fit on. That keeps the stacking honest and avoids leakage. The decision threshold is tuned on the out-of-fold F1 rather than left at the default of 0.5.
+
+Beyond accuracy and F1, the pipeline reports precision-recall AUC, a Brier score to check whether the predicted probabilities are calibrated, and a McNemar test comparing the full ensemble against the logistic-regression baseline. The McNemar test checks whether the added complexity is doing statistically meaningful work rather than just adding moving parts. The pipeline also reports the gap between training and validation performance as an overfitting check.
 
 ## Dataset format
 
+Point the pipeline at a folder split into train and test, each with real and fake subfolders:
+
 ```
 data/
-├── train/
-│   ├── real/    <- authentic images (.jpg / .jpeg / .png / .webp)
-│   └── fake/    <- AI-generated images
-└── test/
-    ├── real/
-    └── fake/
+  train/
+    real/
+    fake/
+  test/
+    real/
+    fake/
 ```
 
-Any binary real-vs-fake image dataset works. The pipeline was originally built and tested on the [140k Real and Fake Faces](https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces) dataset (Flickr faces vs StyleGAN).
+Any binary real-vs-fake image set works (.jpg, .jpeg, .png, .webp). It was originally built and tested on the 140k Real and Fake Faces dataset, which pairs real Flickr faces against StyleGAN-generated faces.
 
----
+No trained weights are included in the repository. You supply a dataset and train, which is the intended workflow given the point above about target distributions.
 
 ## Setup
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
-Point `DATA_DIR` in `config.py` at your dataset root.
-
----
+Set `DATA_DIR` in `config.py` to your dataset root.
 
 ## Training
 
-```bash
+```
 python train.py
 ```
 
-Features are extracted and cached to `cache/` so interrupted runs resume from the last completed phase. Trained models are saved to `saved_models/`.
-
-**Quick test mode** (~30 min on GPU): set `QUICK_TEST = True` in `config.py` to train on 5k images per class.
-
----
+Extracted features are cached to disk, so an interrupted run resumes from the last completed stage. Trained models are written to `saved_models`. For a fast check, set `QUICK_TEST` in `config.py` to train on a small subset per class.
 
 ## Inference
 
-```bash
+```
 python app.py
 ```
 
-Opens a Gradio web UI at `http://localhost:7860`. Upload any image to get a verdict with confidence score and model internals.
-
-Requires trained models in `saved_models/`. Run `train.py` first.
-
----
+This opens a local Gradio interface. Upload an image to get a verdict with a confidence score, along with the individual contributions of the logistic regression and the MLP, so you can see what each part of the ensemble concluded rather than only the final answer. Trained models need to be present in `saved_models` first.
 
 ## Hardware
 
-Tested on an NVIDIA RTX 3050 (4 GB VRAM). The pipeline uses float16 on CUDA to fit within 4 GB. CPU and Apple MPS are supported but significantly slower for feature extraction.
-
-Full training on 100k images takes approximately 2–3 hours on a mid-range GPU.
-
----
+Feature extraction runs the CLIP and DINOv2 vision transformers, so a GPU helps considerably. The pipeline uses float16 on CUDA to keep memory down. CPU and Apple MPS work but are slower for feature extraction. Running full feature extraction over a large dataset is memory-heavy, which is the main practical constraint on a modest machine.
 
 ## Project structure
 
 ```
-├── config.py        - paths, device, hyperparameters
-├── data_loader.py   - dataset scanning and split loading
-├── features.py      - CLIP, DINOv2, and forensic feature extraction + caching
-├── models.py        - MLP architecture and training routines
-├── train.py         - end-to-end training pipeline
-├── predict.py       - single-image inference
-└── app.py           - Gradio web interface
+config.py        paths, device, hyperparameters
+data_loader.py   dataset scanning and split loading
+features.py      CLIP, DINOv2, and forensic feature extraction with caching
+models.py        MLP architecture and training routines
+train.py         end-to-end training, cross-validation, and evaluation
+predict.py       single-image inference
+app.py           Gradio interface
 ```
