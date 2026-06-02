@@ -1,6 +1,25 @@
 # SynthSense
 
-A dataset-agnostic pipeline for detecting AI-generated images: you bring your own set of real and fake images, run training, and get a trained detector. No weights ship with the repository, and that is deliberate. Different generators (StyleGAN, Midjourney, Stable Diffusion, and others) leave different statistical traces, so a detector trained on your target distribution holds up better than a generic pretrained one. SynthSense gives you the full pipeline and lets you point it at whatever data matters to you.
+A dataset-agnostic pipeline for detecting AI-generated images. You point it at your own set of real and fake images, run training, and get a detector fitted to that data. No weights ship with the repository, and that is deliberate: different generators (StyleGAN, Midjourney, Stable Diffusion, and others) leave different statistical traces, so a detector trained on the data you care about holds up better than a generic pretrained one. Train it on StyleGAN images and it learns to spot StyleGAN; train it on Midjourney images and it learns Midjourney; mix several sources to cover all of them. The repository is the pipeline, and the dataset is yours to choose.
+
+## How you run it
+
+There is one thing to configure. Set `DATA_DIR` in `config.py` to your dataset root, arranged like this:
+
+```
+data/
+  train/
+    real/
+    fake/
+  test/
+    real/
+    fake/
+```
+
+Any binary real-vs-fake image set works (.jpg, .jpeg, .png, .webp). Then run `python train.py` and the whole pipeline executes end to end.
+
+The pipeline detects your hardware on its own. It uses CUDA if a GPU is present, then Apple MPS, then CPU, and switches to float16 on CUDA to keep memory down. For a weaker machine, set `QUICK_TEST` in `config.py` to train on a capped subset per class so you can run it without loading the full dataset.
+
 ## Approach
 
 SynthSense does not rely on a single signal. It pulls features from three sources that capture different kinds of evidence, then combines them.
@@ -15,45 +34,11 @@ The three sources concatenate into a single vector of roughly 5,200 dimensions. 
 
 ## Evaluation
 
-The training pipeline is built around avoiding the usual ways a detector can look better than it really is.
+The pipeline is built around avoiding the usual ways a detector can look better than it really is.
 
 Cross-validation uses 5-fold stratified splits. The ensemble is trained with out-of-fold stacking, so the meta-learner never sees predictions from data it was fit on. That keeps the stacking honest and avoids leakage. The decision threshold is tuned on the out-of-fold F1 rather than left at the default of 0.5.
 
-Beyond accuracy and F1, the pipeline reports precision-recall AUC, a Brier score to check whether the predicted probabilities are calibrated, and a McNemar test comparing the full ensemble against the logistic-regression baseline. The McNemar test checks whether the added complexity is doing statistically meaningful work rather than just adding moving parts. The pipeline also reports the gap between training and validation performance as an overfitting check.
-
-## Dataset format
-
-Point the pipeline at a folder split into train and test, each with real and fake subfolders:
-
-```
-data/
-  train/
-    real/
-    fake/
-  test/
-    real/
-    fake/
-```
-
-Any binary real-vs-fake image set works (.jpg, .jpeg, .png, .webp). It was originally built and tested on the 140k Real and Fake Faces dataset, which pairs real Flickr faces against StyleGAN-generated faces.
-
-No trained weights are included in the repository. You supply a dataset and train, which is the intended workflow given the point above about target distributions.
-
-## Setup
-
-```
-pip install -r requirements.txt
-```
-
-Set `DATA_DIR` in `config.py` to your dataset root.
-
-## Training
-
-```
-python train.py
-```
-
-Extracted features are cached to disk, so an interrupted run resumes from the last completed stage. Trained models are written to `saved_models`. For a fast check, set `QUICK_TEST` in `config.py` to train on a small subset per class.
+Beyond accuracy and F1, the pipeline reports precision-recall AUC, a Brier score to check whether the predicted probabilities are calibrated, false-positive and false-negative rates, and a McNemar test comparing the full ensemble against the logistic-regression baseline. The McNemar test checks whether the added complexity is doing statistically meaningful work rather than just adding moving parts. It also reports the gap between training and out-of-fold performance as an overfitting check. All of these are computed at run time and written out only after a completed training run.
 
 ## Inference
 
@@ -61,16 +46,20 @@ Extracted features are cached to disk, so an interrupted run resumes from the la
 python app.py
 ```
 
-This opens a local Gradio interface. Upload an image to get a verdict with a confidence score, along with the individual contributions of the logistic regression and the MLP, so you can see what each part of the ensemble concluded rather than only the final answer. Trained models need to be present in `saved_models` first.
+This opens a local Gradio interface. Upload an image to get a verdict with a confidence score, along with the individual contributions of the logistic regression and the MLP, so you can see what each part of the ensemble concluded rather than only the final answer. Trained models need to be present in `saved_models` first, so run `python train.py` before this.
 
-## Hardware
+## Setup
 
-Feature extraction runs the CLIP and DINOv2 vision transformers, so a GPU helps considerably. The pipeline uses float16 on CUDA to keep memory down. CPU and Apple MPS work but are slower for feature extraction. Running full feature extraction over a large dataset is memory-heavy, which is the main practical constraint on a modest machine.
+```
+pip install -r requirements.txt
+```
+
+Feature extraction caches to disk, so an interrupted run resumes from the last completed stage rather than starting over.
 
 ## Project structure
 
 ```
-config.py        paths, device, hyperparameters
+config.py        paths, device selection, hyperparameters
 data_loader.py   dataset scanning and split loading
 features.py      CLIP, DINOv2, and forensic feature extraction with caching
 models.py        MLP architecture and training routines
