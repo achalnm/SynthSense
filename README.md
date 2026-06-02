@@ -1,7 +1,6 @@
 # SynthSense
 
-Detects whether an image is real or AI-generated. Instead of shipping fixed weights, SynthSense is built to be trained on the distribution you care about. Different generators (StyleGAN, Midjourney, Stable Diffusion, and others) leave different statistical traces, so a detector trained on the target distribution holds up better than a generic one.
-
+A dataset-agnostic pipeline for detecting AI-generated images: you bring your own set of real and fake images, run training, and get a trained detector. No weights ship with the repository, and that is deliberate. Different generators (StyleGAN, Midjourney, Stable Diffusion, and others) leave different statistical traces, so a detector trained on your target distribution holds up better than a generic pretrained one. SynthSense gives you the full pipeline and lets you point it at whatever data matters to you.
 ## Approach
 
 SynthSense does not rely on a single signal. It pulls features from three sources that capture different kinds of evidence, then combines them.
